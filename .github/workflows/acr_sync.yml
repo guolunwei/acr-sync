@@ -1,0 +1,81 @@
+# This workflow will sync dockerhub image(s) to aliyun acr.
+#
+# To configure this workflow:
+#
+# 1. Set up secrets in your workspace: 
+#    - REGISTRY_USERNAME with aliyun username ID
+#    - REGISTRY_PASSWORD with aliyun registry password
+#
+# 2. Set up variables in your workspace:
+#    - REGISTRY with aliyun registry URL
+#    - NAMESPACE with aliyun registry namespace
+
+
+name: sync-images
+
+env:
+  REGISTRY: ${{ vars.REGISTRY}}
+  NAMESPACE: ${{ vars.NAMESPACE }}
+  REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME }}
+  REGISTRY_PASSWORD: ${{ vars.REGISTRY_PASSWORD }}
+  IMAGES: ${{ github.event.inputs.images }}
+
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'images.txt'
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'images name'
+        required: true
+        default: ''
+
+jobs:
+  sync-images:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: write images.txt
+        run: |
+          if [ -n "${{ env.IMAGES }}" ]; then
+            echo "images info is not empty"
+            echo  ${{ env.IMAGES }} > images.txt
+          fi
+          
+      - name: Login to ACR
+        uses: aliyun/acr-login@v1
+        with:
+          login-server: "https://${{ env.REGISTRY }}"
+          username: "${{ secrets.REGISTRY_USERNAME }}"
+          password: "${{ secrets.REGISTRY_PASSWORD }}"
+
+      - name: Use Skopeo Tools Sync Image to swr
+        run: |
+          #!/usr/bin/env bash
+          skopeo --version
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Ignore empty lines and lines starting with #
+            if [[ -z "$line" || "$line" =~ ^# ]]; then
+              continue
+            fi
+            # Check if the line contains a space
+            if [[ "$line" =~ \  ]]; then
+              # bash:latest bash:5
+              origin=$(echo "$line" | awk '{print $1}')
+              new_image=$(echo "$line" | awk '{print $2}')
+            else
+              # bash:5
+              origin=$(echo "$line")
+              new_image=${origin##*/}
+            fi
+            image_name=$(echo "$new_image" | awk -F: '{print $1}')
+            image_tag=$(echo "$new_image" | awk -F: '{print $2}')
+            image_tag=${image_tag:-latest}
+            destination=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/$image_name:$image_tag
+            echo "origin: $origin ==> destination: $destination"
+            skopeo copy --all docker://$origin docker://$destination 
+          done < images.txt
