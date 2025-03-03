@@ -16,8 +16,6 @@ name: sync-images
 env:
   REGISTRY: ${{ vars.REGISTRY}}
   NAMESPACE: ${{ vars.NAMESPACE }}
-  REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME }}
-  REGISTRY_PASSWORD: ${{ vars.REGISTRY_PASSWORD }}
   IMAGES: ${{ github.event.inputs.images }}
 
 
@@ -53,7 +51,7 @@ jobs:
           username: "${{ secrets.REGISTRY_USERNAME }}"
           password: "${{ secrets.REGISTRY_PASSWORD }}"
 
-      - name: Use Skopeo Tools Sync Image to swr
+      - name: Use Skopeo Tools Sync Image to acr
         run: |
           #!/usr/bin/env bash
           skopeo --version
